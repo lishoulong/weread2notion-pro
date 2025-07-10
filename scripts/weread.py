@@ -126,7 +126,7 @@ def download_image(url, save_dir="cover"):
     return save_path
 
 
-def sort_notes(page_id, chapter, bookmark_list):
+def sort_notes(page_id, bookmark_list):
     """对笔记进行排序"""
     bookmark_list = sorted(
         bookmark_list,
@@ -139,35 +139,7 @@ def sort_notes(page_id, chapter, bookmark_list):
     )
 
     notes = []
-    if chapter != None:
-        filter = {"property": "书籍", "relation": {"contains": page_id}}
-        results = notion_helper.query_all_by_book(
-            notion_helper.chapter_database_id, filter
-        )
-        dict1 = {
-            get_number_from_result(x, "chapterUid"): get_rich_text_from_result(
-                x, "blockId"
-            )
-            for x in results
-        }
-        dict2 = {get_rich_text_from_result(x, "blockId"): x.get("id") for x in results}
-        d = {}
-        for data in bookmark_list:
-            chapterUid = data.get("chapterUid", 1)
-            if chapterUid not in d:
-                d[chapterUid] = []
-            d[chapterUid].append(data)
-        for key, value in d.items():
-            if key in chapter:
-                if key in dict1:
-                    chapter.get(key)["blockId"] = dict1.pop(key)
-                notes.append(chapter.get(key))
-            notes.extend(value)
-        for blockId in dict1.values():
-            notion_helper.delete_block(blockId)
-            notion_helper.delete_block(dict2.get(blockId))
-    else:
-        notes.extend(bookmark_list)
+    notes.extend(bookmark_list)
     return notes
 
 
@@ -275,11 +247,11 @@ if __name__ == "__main__":
                 continue
             pageId = notion_books.get(bookId).get("pageId")
             print(f"正在同步《{title}》,一共{len(books)}本，当前是第{index+1}本。")
-            chapter = weread_api.get_chapter_info(bookId)
+            # chapter = weread_api.get_chapter_info(bookId)
             bookmark_list = get_bookmark_list(pageId, bookId)
             reviews = get_review_list(pageId,bookId)
             bookmark_list.extend(reviews)
-            content = sort_notes(pageId, chapter, bookmark_list)
+            content = sort_notes(pageId, bookmark_list)
             append_blocks(pageId, content)
             properties = {
                 "Sort":get_number(sort)

@@ -1,0 +1,19 @@
+{
+  "name": "image-converter",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "scripts": {
+    "start": "node --import 'data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"ts-node/esm\", pathToFileURL(\"./\"));' index.ts",
+    "build": "tsc",
+    "convert": "npm run build && node dist/index.js"
+  },
+  "dependencies": {
+    "image-convert": "^0.1.33",
+    "typescript": "^5.3.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.12",
+    "ts-node": "^10.9.2"
+  },
+  "packageManager": "pnpm@9.4.0+sha512.f549b8a52c9d2b8536762f99c0722205efc5af913e77835dbccc3b0b0b2ca9e7dc8022b78062c17291c48e88749c70ce88eb5a74f1fa8c4bf5e18bb46c8bd83a"
+}

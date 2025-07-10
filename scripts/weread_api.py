@@ -8,20 +8,24 @@ from requests.utils import cookiejar_from_dict
 from http.cookies import SimpleCookie
 from retrying import retry
 WEREAD_URL = "https://weread.qq.com/"
-WEREAD_NOTEBOOKS_URL = "https://i.weread.qq.com/user/notebooks"
-WEREAD_BOOKMARKLIST_URL = "https://i.weread.qq.com/book/bookmarklist"
-WEREAD_CHAPTER_INFO = "https://i.weread.qq.com/book/chapterInfos"
-WEREAD_READ_INFO_URL = "https://i.weread.qq.com/book/readinfo"
-WEREAD_REVIEW_LIST_URL = "https://i.weread.qq.com/review/list"
-WEREAD_BOOK_INFO = "https://i.weread.qq.com/book/info"
-WEREAD_READDATA_DETAIL = "https://i.weread.qq.com/readdata/detail"
-WEREAD_HISTORY_URL = "https://i.weread.qq.com/readdata/summary?synckey=0"
+WEREAD_NOTEBOOKS_URL = "https://weread.qq.com/api/user/notebook"
+WEREAD_BOOKMARKLIST_URL = "https://weread.qq.com/web/book/bookmarklist"
+WEREAD_READ_INFO_URL = "https://weread.qq.com/api/book/info"
+WEREAD_REVIEW_LIST_URL = "https://weread.qq.com/web/review/list"
 
 class WeReadApi:
     def __init__(self):
         self.cookie = self.get_cookie()
         self.session = requests.Session()
         self.session.cookies = self.parse_cookie_string()
+        self.session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'Accept-Language': 'zh-CN,zh;q=0.9',
+            'Referer': 'https://weread.qq.com/',
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+        })
 
 
     def try_get_cloud_cookie(self,url, id, password):
@@ -44,14 +48,7 @@ class WeReadApi:
 
 
     def get_cookie(self):
-        url = os.getenv("CC_URL")
-        if not url:
-            url = "https://cookiecloud.malinkang.com/"
-        id = os.getenv("CC_ID")
-        password = os.getenv("CC_PASSWORD")
         cookie = os.getenv("WEREAD_COOKIE")
-        if url and id and password:
-            cookie = self.try_get_cloud_cookie(url, id, password)
         if not cookie or not cookie.strip():
             raise Exception("没有找到cookie，请按照文档填写cookie")
         return cookie
@@ -80,24 +77,32 @@ class WeReadApi:
         """获取笔记本列表"""
         self.session.get(WEREAD_URL)
         r = self.session.get(WEREAD_NOTEBOOKS_URL)
-        if r.ok:
-            data = r.json()
-            books = data.get("books")
-            books.sort(key=lambda x: x["sort"])
-            return books
-        else:
+        if not r.ok:
             raise Exception(f"Could not get notebook list {r.text}")
+            
+        content_type = r.headers.get('Content-Type', '')
+        if 'application/json' not in content_type:
+            raise Exception(f"Unexpected response format: {content_type}")
+            
+        data = r.json()
+        books = data.get("books")
+        books.sort(key=lambda x: x["sort"])
+        return books
 
     @retry(stop_max_attempt_number=3, wait_fixed=5000)
     def get_bookinfo(self, bookId):
         """获取书的详情"""
         self.session.get(WEREAD_URL)
         params = dict(bookId=bookId)
-        r = self.session.get(WEREAD_BOOK_INFO, params=params)
-        if r.ok:
-            return r.json()
-        else:
+        r = self.session.get(WEREAD_READ_INFO_URL, params=params)
+        if not r.ok:
             return None
+            
+        content_type = r.headers.get('Content-Type', '')
+        if 'application/json' not in content_type:
+            raise Exception(f"Unexpected response format: {content_type}")
+            
+        return r.json()
 
     @retry(stop_max_attempt_number=3, wait_fixed=5000)
     def get_bookmark_list(self, bookId):
@@ -128,7 +133,7 @@ class WeReadApi:
         params = dict(bookId=bookId, listType=11, mine=1, syncKey=0)
         r = self.session.get(WEREAD_REVIEW_LIST_URL, params=params)
         if r.ok:
-            reviews = r.json().get("reviews")
+            reviews = r.json().get("reviews") or []
             reviews = list(map(lambda x: x.get("review"), reviews))
             reviews = [
                 {"chapterUid": 1000000, **x} if x.get("type") == 4 else x
@@ -137,43 +142,32 @@ class WeReadApi:
             return reviews
         else:
             raise Exception(f"get {bookId} review list failed {r.text}")
-        
-    @retry(stop_max_attempt_number=3, wait_fixed=5000) 
-    def get_api_data(self):
-        r = self.session.get(WEREAD_HISTORY_URL)
-        if not r.ok:
-            if r.json()["errcode"] == -2012:
-                self.session.get(WEREAD_URL)
-                r = self.session.get(WEREAD_HISTORY_URL)
-            else:
-                raise Exception("Can not get weread history data")
-        return r.json()
     
     @retry(stop_max_attempt_number=3, wait_fixed=5000) 
-    def get_chapter_info(self,bookId):
-        self.session.get(WEREAD_URL)
-        body = {"bookIds": [bookId], "synckeys": [0], "teenmode": 0}
-        r = self.session.post(WEREAD_CHAPTER_INFO, json=body)
-        if (
-            r.ok
-            and "data" in r.json()
-            and len(r.json()["data"]) == 1
-            and "updated" in r.json()["data"][0]
-        ):
-            update = r.json()["data"][0]["updated"]
-            update.append(
-                {
-                    "chapterUid": 1000000,
-                    "chapterIdx": 1000000,
-                    "updateTime": 1683825006,
-                    "readAhead": 0,
-                    "title": "点评",
-                    "level": 1,
-                }
-            )
-            return {item["chapterUid"]: item for item in update}
-        else:
-            raise Exception(f"get {bookId} chapter info failed {r.text}")
+    # def get_chapter_info(self,bookId):
+    #     self.session.get(WEREAD_URL)
+    #     body = {"bookIds": [bookId], "synckeys": [0], "teenmode": 0}
+    #     r = self.session.post(WEREAD_CHAPTER_INFO, json=body)
+    #     if (
+    #         r.ok
+    #         and "data" in r.json()
+    #         and len(r.json()["data"]) == 1
+    #         and "updated" in r.json()["data"][0]
+    #     ):
+    #         update = r.json()["data"][0]["updated"]
+    #         update.append(
+    #             {
+    #                 "chapterUid": 1000000,
+    #                 "chapterIdx": 1000000,
+    #                 "updateTime": 1683825006,
+    #                 "readAhead": 0,
+    #                 "title": "点评",
+    #                 "level": 1,
+    #             }
+    #         )
+    #         return {item["chapterUid"]: item for item in update}
+    #     else:
+    #         raise Exception(f"get {bookId} chapter info failed {r.text}")
         
     def transform_id(self,book_id):
         id_length = len(book_id)

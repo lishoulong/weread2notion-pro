@@ -1,6 +1,5 @@
 requests
 notion-client
-github-heatmap
 retrying
-pendulum
+openai
 python-dotenv
