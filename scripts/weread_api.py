@@ -12,6 +12,7 @@ WEREAD_NOTEBOOKS_URL = "https://weread.qq.com/api/user/notebook"
 WEREAD_BOOKMARKLIST_URL = "https://weread.qq.com/web/book/bookmarklist"
 WEREAD_READ_INFO_URL = "https://weread.qq.com/api/book/info"
 WEREAD_REVIEW_LIST_URL = "https://weread.qq.com/web/review/list"
+WEREAD_BOOK_SHELF_URL = "https://weread.qq.com/web/shelf/sync"
 
 class WeReadApi:
     def __init__(self):
@@ -66,7 +67,7 @@ class WeReadApi:
     
     def get_bookshelf(self):
         self.session.get(WEREAD_URL)
-        r = self.session.get("https://i.weread.qq.com/shelf/sync?synckey=0&teenmode=0&album=1&onlyBookid=0")
+        r = self.session.get(WEREAD_BOOK_SHELF_URL)
         if r.ok:
             return r.json()
         else:
